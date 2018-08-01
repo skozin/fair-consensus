@@ -1,11 +1,11 @@
 exports.makeRunner = makeRunner
 exports.runGenerator = runGenerator
 
-function makeRunner(effectHandlersByType) {
-  return async gen => runGenerator(gen, effectHandlersByType)
+function makeRunner(effectHandlersByType, genId = null) {
+  return async gen => runGenerator(gen, effectHandlersByType, genId)
 }
 
-async function runGenerator(gen, effectHandlersByType) {
+async function runGenerator(gen, effectHandlersByType, genId = null) {
   if ('function' === typeof gen) {
     gen = gen()
   }
@@ -33,7 +33,7 @@ async function runGenerator(gen, effectHandlersByType) {
     }
     isError = false
     try {
-      result = handler(effect)
+      result = handler(effect, genId)
       if (isThenable(result)) {
         result = await result
       }

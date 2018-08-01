@@ -1,7 +1,7 @@
 const assert = require('assert')
 
 const Effects = require('../src/effects')
-const {State: ConsensusState, handlePropose} = require('../src/consensus')
+const {State: ConsensusState, handlePropose} = require('../src/propose')
 
 const TestRunner = require('./utils/test-runner')
 

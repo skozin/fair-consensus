@@ -8,80 +8,216 @@ const State = {
   AWAIT: 'await',
 }
 
-exports.State = State
-exports.handlePropose = handlePropose
+const handlers = {
+  'PROPOSE': handlePropose,
+  'PREVOTE': handlePrevote,
+  'PRECOMMIT': handlePrecommit,
+}
 
-function* handlePropose(consensusState, {pubkey, sig, header, orderedTxBody}) {
-  if (consensusState.state !== State.PROPOSE) {
-    // l(`${state} not propose`)
-    return false
+function calcualteStep(timestamp, config) {
+  const second = timestamp % config.blocktime
+  if (second < config.stepLatency) {
+    return State.PROPOSE
+  } else if (second < config.stepLatency * 2) {
+    return State.PREVOTE
+  } else if (second < config.stepLatency * 3) {
+    return State.PRECOMMIT
+  } else {
+    return State.AWAIT
+  }
+}
+
+function* consensus(config) {
+  let state = {
+    peerId: config.peerId,
+    h: 0,
+    step: State.AWAIT,
+    lockedValue: null,
+    proposedValue: null,
+    prevotes: {},
+    precommits: {},
   }
 
-  const validators = yield Effects.getValidators()
-  const proposer = validators.find(f => f.block_pubkey.equals(pubkey))
+  while(true) {
+    const nextMessages = yield Effects.getNextMessages()
 
-  if (!proposer) {
-    // l(`proposer not found in validators list`)
-    return false
+    for (const message of nextMessages) {
+      if (message && message.type) {
+        yield* handlers[message.type](state, message)
+      } else {
+        throw new Error(
+          `message expected to be an object with field type, but recived ${JSON.stringify(message)}`
+        )
+      }
+    }
+
+    const nextStep = calcualteStep(yield Effects.getTimestamp(), config)
+
+    if (state.step == State.AWAIT && nextStep == State.PROPOSE) {
+      yield* awiatToProposeTransition(state)
+    } else if (state.step == State.PROPOSE && nextStep == State.PREVOTE) {
+      yield* proposeToPrevoteTransition(state)
+    } else if (state.step == State.PREVOTE && nextStep == State.PRECOMMIT) {
+      yield* prevoteToPrecommitTransition(state)
+    } else if (state.step == State.PRECOMMIT && nextStep == State.AWAIT) {
+      yield* precommitToAwaitTransition(state)
+    }
+
+    yield Effects.sleep(13)
+  }
+}
+
+function* awiatToProposeTransition(state) {
+  // console.log('awiatToProposeTransition')
+
+  state.step = State.PROPOSE
+  const proposerId = yield Effects.getProposerId()
+
+  if (state.peerId !== proposerId) {
+    // console.log(`You ${state.peerId} are not the current proposer ${proposerId}`)
+    return
   }
 
-  if (header.length < 5) {
-    // l(`${proposer.id} voted nil`)
-    return false
-  }
+  const value = state.lockedValue
+    ? state.lockedValue
+    : yield Effects.getValue()
 
-  const config = yield Effects.getConfig()
-  const nextValidator = calculateNextValidator(yield Effects.getTimestamp(), validators, config)
+  // console.log('value', value)
 
-  if (proposer !== nextValidator) {
-    // l(`You ${proposer.id} are not the current proposer ${nextValidator.id}`)
-    return false
-  }
-
-  if (!(yield Effects.ecVerify(header, sig, pubkey))) {
-    // l('Invalid proposer sig')
-    return false
-  }
-
-  const proposedBlock = yield Effects.getProposedBlock()
-  if (proposedBlock.locked) {
-    // l(`Still locked: ${toHex(proposedBlock.header)} ${toHex(header)}`)
-    return false
-  }
-
-  if (!(yield Effects.verifyBlock(header, orderedTxBody))) {
-    // l(`Bad block proposed ${toHex(header)}`)
-    return false
-  }
-
-  yield Effects.saveProposedBlock({
-    proposer: pubkey,
-    sig: sig,
-    header: bin(header),
-    ordered_tx_body: orderedTxBody,
+  yield Effects.broadcast({
+    type: 'PROPOSE',
+    peerId: state.peerId,
+    value: value,
   })
-
-  return true
 }
 
-function calculateNextValidator(timestamp, validators, config, skip = false) {
-  const currentIndex = Math.floor(timestamp / config.blocktime) % config.total_shares
-  let searchIndex = 0
+function* proposeToPrevoteTransition(state) {
+  // console.log('proposeToPrevoteTransition')
+  state.step = State.PREVOTE
 
-  for (let i = 0; i < validators.length; i++) {
-    const current = validators[i]
-    searchIndex += current.shares
+  const prevotable = state.proposedValue
+    ? state.proposedValue
+    : 0
 
-    if (searchIndex <= currentIndex) continue
-    if (!skip) return current
+  yield Effects.broadcast({
+    type: 'PREVOTE',
+    peerId: state.peerId,
+    value: prevotable,
+  })
+}
 
-    // go back to 0
-    if (currentIndex + 1 == config.total_shares) return validators[0]
+function* handlePropose(state, message) {
+  // console.log('handlePropose', state, message)
 
-    // same validator
-    if (currentIndex + 1 < searchIndex) return current
+  if (state.step !== State.PROPOSE) {
+    return
+  }
 
-    // next validator
-    return validators[i + 1]
+  const proposerId = yield Effects.getProposerId()
+  if (message.peerId !== proposerId) {
+    return
+  }
+
+  if (state.lockedValue) {
+    return
+  }
+
+  // TODO: verify proposeMessage
+
+  // console.log('accept propose', message)
+  state.proposedValue = message.value
+}
+
+
+function* handlePrevote(state, message) {
+  // console.log('handlePrevote', message)
+
+  if (state.step !== State.PREVOTE) {
+    // recived PREVOTE message on wrong step => do nothing
+    return
+  }
+
+  if (message.value === 0) {
+    // voted nil
+    return
+  }
+
+  if (!state.proposedValue) {
+    // there is no proposed value
+    return
+  }
+
+  if (state.proposedValue !== message.value) {
+    // proposed value not equals value from PREVOTE message
+    return
+  }
+
+  // TODO: verify validator signature
+
+  // console.log('accept prevotes', message)
+
+  state.prevotes[message.peerId] = true
+}
+
+function* handlePrecommit(state, message) {
+  // console.log('handlePrecommit', message)
+
+  if (state.step !== State.PRECOMMIT) {
+    // recived PRECOMMIT message on wrong step => do nothing
+    return
+  }
+
+  if (message.value === 0) {
+    // voted nil
+    return
+  }
+
+  if (!state.proposedValue) {
+    // there is no proposed value
+    return
+  }
+
+  if (state.proposedValue !== message.value) {
+    // proposed value not equals value from PRECOMMIT message
+    return
+  }
+
+  // TODO: verify validator signature
+
+  // console.log('accept precommit', message)
+
+  state.precommits[message.peerId] = true
+}
+
+
+function* prevoteToPrecommitTransition(state) {
+  // console.log('prevoteToPrecommitTransition')
+  state.step = State.PRECOMMIT
+
+  if (yield Effects.achievedQuorum(state.prevotes)) {
+    state.lockedValue = state.proposedValue
+
+    yield Effects.broadcast({
+      type: 'PRECOMMIT',
+      peerId: state.peerId,
+      value: state.proposedValue,
+    })
   }
 }
+
+function* precommitToAwaitTransition(state) {
+  // console.log('precommitToAwaitTransition')
+  state.step = State.AWAIT
+  if (yield Effects.achievedQuorum(state.precommits)) {
+    yield Effects.commitValue(state.lockedValue)
+
+    state.lockedValue = null
+    state.proposedValue = null
+    state.prevotes = {}
+    state.precommits = {}
+
+    state.h += 1
+  }
+}
+
+exports.consensus = consensus

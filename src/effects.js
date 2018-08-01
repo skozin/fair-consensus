@@ -48,3 +48,66 @@ Effects.verifyBlock = (header, orderedTxBody) => {
 }
 
 Effects.verifyBlock.type = 'verifyBlock'
+
+////////////////////////////////////////////////////////////////////////////////
+
+Effects.sleep = (ms) => {
+  return {type: Effects.sleep.type, ms}
+}
+
+Effects.sleep.type = 'sleep'
+
+Effects.proposer = () => {
+  return {type: Effects.proposer.type}
+}
+
+Effects.proposer.type = 'proposer'
+
+Effects.getValue = () => {
+  return {type: Effects.getValue.type}
+}
+
+Effects.getValue.type = 'getValue'
+
+Effects.gossip = () => {
+  return {type: Effects.gossip.type}
+}
+
+Effects.gossip.type = 'gossip'
+
+Effects.getNextMessages = () => {
+  return {type: Effects.getNextMessages.type}
+}
+
+Effects.getNextMessages.type = 'getNextMessages'
+
+Effects.broadcast = (msg) => {
+  return {type: Effects.broadcast.type, msg}
+}
+
+Effects.broadcast.type = 'broadcast'
+
+Effects.getProposerId = () => {
+  return {type: Effects.getProposerId.type}
+}
+
+Effects.getProposerId.type = 'getProposerId'
+
+Effects.achievedQuorum = (votes) => {
+  return {type: Effects.achievedQuorum.type, votes}
+}
+
+Effects.achievedQuorum.type = 'achievedQuorum'
+
+Effects.commitValue = (value) => {
+  return {type: Effects.commitValue.type, value}
+}
+
+Effects.commitValue.type = 'commitValue'
+
+
+Effects.getValue = () => {
+  return {type: Effects.getValue.type}
+}
+
+Effects.getValue.type = 'getValue'
