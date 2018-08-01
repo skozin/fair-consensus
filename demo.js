@@ -14,6 +14,7 @@ const config = {
   blocktime: 5,
   stepLatency: 1,
   totalShares: totalShares,
+  majority: totalShares * 2 / 3,
 }
 
 const q = new MessageQueue(validators.map(v => v.peerId))
@@ -32,7 +33,14 @@ const effectHandlers = {
   [Effects.getProposerId.type]: _ => {
     return calculateNextValidator(seconds(), validators, config).peerId
   },
-  [Effects.achievedQuorum.type]: ({votes}) => true,
+  [Effects.achievedQuorum.type]: ({votes}) => {
+    const totalShares = validators.reduce(
+      (totalShares, v) => totalShares + (votes[v.peerId] ? v.shares : 0),
+      0
+    )
+
+    return totalShares > config.majority
+  },
   [Effects.commitValue.type]: ({value}, peerId) => {
     blockchains[peerId].push(value)
     console.log(`⛓️⛓️⛓️  got new block from ${peerId}`, value)
