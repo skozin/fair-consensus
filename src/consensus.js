@@ -1,5 +1,4 @@
 const Effects = require('./effects')
-const bin = require('./utils/bin')
 
 const State = {
   PROPOSE: 'propose',
@@ -128,7 +127,6 @@ function* handlePropose(state, message) {
   state.proposedValue = message.value
 }
 
-
 function* handlePrevote(state, message) {
   // console.log('handlePrevote', message)
 
@@ -188,7 +186,6 @@ function* handlePrecommit(state, message) {
 
   state.precommits[message.peerId] = true
 }
-
 
 function* prevoteToPrecommitTransition(state) {
   // console.log('prevoteToPrecommitTransition')
