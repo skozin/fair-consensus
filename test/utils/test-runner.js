@@ -9,24 +9,32 @@ const State = {
 
 module.exports = class TestRunner {
 
-  constructor(gen, effectHandlersByType = {}) {
+  constructor(gen, effectHandlersByType = {}, genId = null) {
     this._gen = gen
+    this._genId = genId
     this._state = State.NEW
     this._genFinishedFuture = makeFuture()
     this._effectHandlersByType = effectHandlersByType
     this._decoratedEffectHandlersByType = {}
     this._stopOnEffectType = null
+    this._waitUntilNEffectsProduced = 0
+    this._numEffectsProduced = 0
     this._stoppedOnEffectFuture = null
     this._effectResultFuture = null
   }
 
   resumeAndRunUntilEffect(stopOnEffectType, resumeWithValue = undefined) {
-    this._resume(stopOnEffectType, resumeWithValue)
+    this._resume(stopOnEffectType, 1, resumeWithValue)
+    return this._stoppedOnEffectFuture.promise
+  }
+
+  resumeAndRunUntilNEffectsProduced(stopOnEffectType, n, resumeWithValue = undefined) {
+    this._resume(stopOnEffectType, n, resumeWithValue)
     return this._stoppedOnEffectFuture.promise
   }
 
   resumeAndRunUntilFinish(resumeWithValue = undefined) {
-    this._resume(null, resumeWithValue)
+    this._resume(null, null, resumeWithValue)
     return this.finishedPromise()
   }
 
@@ -42,7 +50,7 @@ module.exports = class TestRunner {
     return this._state >= State.SUCCEEDED
   }
 
-  _resume(stopOnEffectType, resumeWithValue = undefined) {
+  _resume(stopOnEffectType, waitUntilNEffectsProduced, resumeWithValue) {
     if (this.isFinished()) {
       throw new Error(`cannot resume finished generator`)
     }
@@ -52,6 +60,8 @@ module.exports = class TestRunner {
     }
 
     this._stopOnEffectType = stopOnEffectType
+    this._waitUntilNEffectsProduced = waitUntilNEffectsProduced
+    this._numEffectsProduced = 0
 
     if (stopOnEffectType !== null) {
       // console.log(`will stop on effect of type "${stopOnEffectType}"`)
@@ -84,7 +94,7 @@ module.exports = class TestRunner {
     this._state = State.STARTED
     this._populateDecoratedEffectHandlers()
 
-    const promise = runGenerator(this._gen, this._decoratedEffectHandlersByType)
+    const promise = runGenerator(this._gen, this._decoratedEffectHandlersByType, this._genId)
 
     promise.then(result => {
       this._state = State.SUCCEEDED
@@ -108,7 +118,10 @@ module.exports = class TestRunner {
 
   _makeEffectHandler(effectType) {
     return effect => {
-      if (this._stopOnEffectType === effect.type) {
+      if (
+        this._stopOnEffectType === effect.type &&
+        ++this._numEffectsProduced === this._waitUntilNEffectsProduced
+      ) {
         this._stopOnEffectType = null
         this._effectResultFuture = makeFuture()
         this._stoppedOnEffectFuture.resolve(effect)
