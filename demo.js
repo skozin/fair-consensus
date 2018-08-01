@@ -6,7 +6,7 @@ const {consensus} = require('./src/consensus')
 
 const peers = ['peer_1', 'peer_2', 'peer_3', 'peer_4']
 
-const validators = peers.map(peerId => makeVaidator(peerId))
+const validators = peers.map(peerId => makeValidator(peerId))
 const totalShares = validators.reduce((sum, v) => sum + v.shares, 0)
 const blockchains = initBlockchains(peers)
 
@@ -46,7 +46,7 @@ validators.forEach(v => {
     .catch(err => console.log(`error:`, err.stack))
 })
 
-function makeVaidator(peerId) {
+function makeValidator(peerId) {
   return {
     peerId,
     shares: 1,
