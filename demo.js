@@ -2,7 +2,7 @@ const {runGenerator} = require('./src/utils/runner')
 const {MessageQueue} = require('./src/utils/message-queue')
 const Effects = require('./src/effects')
 
-const {consensus} = require('./src/consensus')
+const {consensus} = require('./src/consensus/consensus')
 
 const peers = ['peer_1', 'peer_2', 'peer_3', 'peer_4']
 
