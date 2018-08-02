@@ -136,7 +136,7 @@ module.exports = class TestRunner {
       if (!handler) {
         throw new Error(`no handler for effect with type '${effect.type}'`)
       }
-      return handler(effect)
+      return handler(effect, this._genId)
     }
   }
 
