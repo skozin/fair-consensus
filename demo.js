@@ -3,6 +3,7 @@ const {MessageQueue} = require('./src/utils/message-queue')
 const Effects = require('./src/effects')
 
 const {consensus} = require('./src/consensus/consensus')
+const {malicious} = require('./src/consensus/malicious')
 
 const peers = ['peer_1', 'peer_2', 'peer_3', 'peer_4']
 
@@ -48,7 +49,14 @@ const effectHandlers = {
 }
 
 validators.forEach(v => {
-  const consensusInstance = consensus({...config, ...v})
+  let consensusInstance
+
+  if (v.peerId === 'peer_4'){
+    consensusInstance = malicious({...config, ...v})
+  } else {
+    consensusInstance = consensus({...config, ...v})
+  }
+
   runGenerator(consensusInstance, effectHandlers, v.peerId)
     .then(result => console.log(`result:`, result))
     .catch(err => console.log(`error:`, err.stack))
